@@ -57,30 +57,14 @@ class DerivativeMachine(re: Regex) {
 
   // Returns true iff 'str' is recognized by 're'.
   def eval(str: String): Boolean = { 
-      //derive each character 
-      for (i <- str) { 
-        if(derive(i)==`∅`)
-          false 
-      }
-      true 
+      //if you get empty language return false 
+      str.foldLeft(re)((currentRe, char) => run(Seq(currentRe), Seq(PushDerive), char)).nullable == ε
+           //derive(char)).nullable == ε
   } 
 
   // Returns the derivative of 're' w.r.t. 'char'.
   def derive(char: Char): Regex = { 
-    re
-    // val operands: Seq[Regex] = re 
-    // re.run(operands, PushDerive, char) 
-    // case `∅` | `ε` => ∅
-    // case Chars(chars) => if (chars.contains(char)) ε else ∅
-    // case Concatenate(re1, re2) => {
-    //   //(derive(re1, char) ~ re2) | (re1.nullable ~ derive(re2, char))
-     
-    // }
-    // case Union(re1, re2) =>  Union(//derive(re1, char) | derive(re2, char)
-    // case rek @ KleeneStar(re1) => derive(re1, char) ~ rek
-    // case Complement(re1) => !derive(re1, char)
-    // case Intersect(re1, re2) => derive(re1, char) & derive(re2, char)
-
+    run(Seq(re), Seq(PushDerive), char)
   }
 
   //----------------------------------------------------------------------------
@@ -88,23 +72,51 @@ class DerivativeMachine(re: Regex) {
   //----------------------------------------------------------------------------
 
   // Derives a regular expression from the top of 'operands' w.r.t. 'char'.
-  //@annotation.tailrec
+  @annotation.tailrec
   private def run(operands: Seq[Regex], program: Program, char: Char): Regex = {
-   //  if (program.isEmpty) {
-   //    assert(operands.size == 1)
-   //    operands.head
-   //  }
-   //  else { 
-   //    program match {
-   //      case PushDerive => { } 
-   //      case PushConcatenate => { }
-   //      case PushUnion => { }
-   //      case PushComplement => {} 
-   //      case PushIntersect => { } 
-   //      case PushNullable => { }
-   //      case PushRe(re) => { } 
-   //    }
-   // }
-   re
+    if (program.isEmpty) {
+      assert(operands.size == 1)
+      operands.head
+    }
+    else { 
+      //assert operands size > 1??
+      //Seq(PushDerive, PushRe(re)) ++ Program.tail) --> pre-append 
+      program.head match {
+        case PushDerive => { 
+          operands.head match {
+            case `∅`|`ε` => {
+              run(∅ +: operands.tail, program.tail, char) }
+            case Chars(a) => { 
+              //run(Chars(a) +: operands.tail, PushNullable +: program.tail, char)
+              if (a.contains(char)) ε else ∅
+            }
+            case Union(a, b) => { run(a +: operands.tail, Seq(PushDerive, PushRe(b), PushDerive, PushUnion) ++ program.tail, char) }
+            case Intersect(a, b) => { run(a +: operands.tail, Seq(PushDerive, PushRe(b), PushDerive, PushIntersect) ++ program.tail, char) }
+            case Concatenate(a, b) => { 
+              //Concatenate(a, b)??? ASK TA
+              //COCATNT: (derive(re1, char) ~ re2) | (re1.nullable ~ derive(re2, char))
+              run(a +: operands.tail, Seq(PushDerive, PushRe(b), PushConcatenate, PushRe(a), PushNullable, PushRe(b), PushDerive, PushConcatenate, PushUnion) ++ program.tail, char)
+            }
+            case Complement(a) => { run(a +: operands.tail, PushDerive +: PushComplement +: program.tail, char) }
+            case rek @ KleeneStar(a) => { 
+              //println(a +: rek +: operands.tail)
+              //println("omer is testing")
+              run(a +: operands.tail, PushDerive +: PushRe(rek) +: PushConcatenate +: program.tail, char ) 
+            }
+           // case _ => {  } // throw an exception??? 
+          }
+        } 
+        case PushConcatenate => { 
+          //ASSERT > 2
+          run(Concatenate(operands.head, operands.tail.head) +: operands.tail.tail, program.tail, char) 
+        }
+        case PushUnion => { run(Union(operands.head, operands.tail.head) +: operands.tail.tail, program.tail, char)}
+        case PushComplement => { run(Complement(operands.head) +: operands.tail, program.tail, char) } 
+        case PushIntersect => { run(Intersect(operands.head, operands.tail.head) +: operands.tail.tail, program.tail, char) } 
+        case PushNullable => { run(operands.head.nullable +: operands.tail, program.tail, char) }
+        case PushRe(re) => { run(re +: operands, program.tail, char) } 
+      }
+   }
+   
 }
 }
